@@ -50,7 +50,14 @@ void Compute(graph<vertex>& GA, commandLine P) {
     vertexSubset output = edgeMap(GA, Frontier, BFS_F(Parents));    
     Frontier.del();
     Frontier = output; //set new frontier
-  } 
+  }
+  for (unsigned long i = 0u; i < n; i++)  {
+    if (Parents[i] == UINT_E_MAX) {
+      printf("node ID: %lu | parent node ID: NOT REACHED\n", i);
+    } else {
+      printf("node ID: %lu | parent node ID: %lu\n", i, Parents[i]);
+    }
+  }
   Frontier.del();
   free(Parents); 
 }
