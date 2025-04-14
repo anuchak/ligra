@@ -1,5 +1,5 @@
 // This code is part of the project "Ligra: A Lightweight Graph Processing
-// Framework for Shared Memory", presented at Principles and Practice of 
+// Framework for Shared Memory", presented at Principles and Practice of
 // Parallel Programming, 2013.
 // Copyright (c) 2013 Julian Shun and Guy Blelloch
 //
@@ -42,7 +42,7 @@
 #include "edgeMap_utils.h"
 using namespace std;
 
-//*****START FRAMEWORK*****
+/*****START FRAMEWORK*****/
 
 typedef uint32_t flags;
 const flags no_output = 1;
@@ -245,7 +245,7 @@ vertexSubsetData<data> edgeMapData(graph<vertex>& GA, VS &vs, F f,
   uintT* degrees = NULL;
   vertex* frontierVertices = NULL;
   uintT outDegrees = 0;
-  if((fl & no_dense) || threshold > 0) { //compute sum of out-degrees if threshold > 0 
+  if((fl & no_dense) || threshold > 0) { //compute sum of out-degrees if threshold > 0
     vs.toSparse();
     degrees = newA(uintT, m);
     frontierVertices = newA(vertex,m);
@@ -262,9 +262,10 @@ vertexSubsetData<data> edgeMapData(graph<vertex>& GA, VS &vs, F f,
     if(degrees) free(degrees);
     if(frontierVertices) free(frontierVertices);
     vs.toDense();
-    return (fl & dense_forward) ?
+    return edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl);
+    /*return (fl & dense_forward) ?
       edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl) :
-      edgeMapDense<data, vertex, VS, F>(GA, vs, f, fl);
+      edgeMapDense<data, vertex, VS, F>(GA, vs, f, fl);*/
   } else {
     auto vs_out =
       (should_output(fl) && fl & sparse_no_filter) ? // only call snof when we output
@@ -369,7 +370,7 @@ vertexSubsetData<uintE> edgeMapFilter(graph<vertex>& GA, vertexSubset& vs, P& p,
 
 
 
-//*****VERTEX FUNCTIONS*****
+/*****VERTEX FUNCTIONS*****/
 
 template <class F, class VS, typename std::enable_if<
   !std::is_same<VS, vertexSubset>::value, int>::type=0 >
@@ -536,14 +537,18 @@ int parallel_main(int argc, char* argv[]) {
       hypergraph<asymmetricVertex> G =
         readHypergraph<asymmetricVertex>(iFile,compressed,symmetric,binary,mmap); //asymmetric graph
 #endif
-      Compute(G,P);
-      if(G.transposed) G.transpose();
-      for(int r=0;r<rounds;r++) {
+      for (auto i = 32; i > 0; i/=2) {
+         omp_set_num_threads(i);
+         printf("Setting total threads to: %u\n", i);
+      	 Compute(G,P);
+      }
+      /*if(G.transposed) G.transpose();
+      for(int r=0;r<1;r++) {
         startTime();
         Compute(G,P);
         nextTime("Running time");
         if(G.transposed) G.transpose();
-      }
+      }*/
       G.del();
     }
   }
