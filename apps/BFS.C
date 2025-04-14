@@ -43,7 +43,7 @@ void Compute(graph<vertex>& GA, commandLine P) {
   for (auto round = 0u; round < 2u; round++) {
   auto duration = std::chrono::system_clock::now().time_since_epoch();
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-  // re-using the rounds parameter for
+  // re-using the rounds parameter for total sources to perform BFS for
   long start = P.getOptionLongValue("-r",0);
   for (auto source = 0u; source < start; source++) {
    // printf("source: %lu \n", source);
