@@ -84,7 +84,7 @@ void Compute(graph<vertex> &GA, commandLine P) {
                 vertexSubset Frontier(n, source); //creates initial frontier
                 int level = 0;
                 while (!Frontier.isEmpty()) {
-                    vertexSubset output = edgeMap(GA, Frontier, BFS_F(Parents), threadsPerSource);
+                    vertexSubset output = edgeMapLimitedThreads(GA, Frontier, BFS_F(Parents), threadsPerSource);
                     Frontier.del();
                     Frontier = output; //set new frontier
                     level++;

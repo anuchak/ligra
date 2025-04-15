@@ -316,8 +316,8 @@ vertexSubsetData<data> edgeMapData(graph<vertex>& GA, VS &vs, F f,
 
 // Decides on sparse or dense base on number of nonzeros in the active vertices.
 template <class data, class vertex, class VS, class F>
-vertexSubsetData<data> edgeMapData(graph<vertex>& GA, VS &vs, F f,
-    intT threshold = -1, const flags& fl=0, const int maxThreads) {
+vertexSubsetData<data> edgeMapDataLimitedThreads(graph<vertex>& GA, VS &vs, F f, const int maxThreads,
+    intT threshold = -1, const flags& fl=0) {
   long numVertices = GA.n, numEdges = GA.m, m = vs.numNonzeros();
   if(threshold == -1) threshold = numEdges/20; //default threshold
   vertex *G = GA.V;
@@ -368,9 +368,9 @@ vertexSubset edgeMap(graph<vertex>& GA, VS& vs, F f,
 }
 
 template <class vertex, class VS, class F>
-vertexSubset edgeMap(graph<vertex>& GA, VS& vs, F f, const int maxThreads,
+vertexSubset edgeMapLimitedThreads(graph<vertex>& GA, VS& vs, F f, const int maxThreads,
     intT threshold = -1, const flags& fl=0) {
-  return edgeMapData<pbbs::empty>(GA, vs, f, threshold, fl, maxThreads);
+  return edgeMapDataLimitedThreads<pbbs::empty>(GA, vs, f, maxThreads, threshold, fl);
 }
 
 // Packs out the adjacency lists of all vertex in vs. A neighbor, ngh, is kept
