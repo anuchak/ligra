@@ -29,6 +29,8 @@
 #include <cstring>
 #include <string>
 #include <algorithm>
+#include <omp.h>
+
 #include "parallel.h"
 #include "gettime.h"
 #include "utils.h"
@@ -103,6 +105,42 @@ vertexSubsetData<data> edgeMapDenseForward(graph<vertex> GA, VS& vertexSubset, F
         G[i].decodeOutNgh(i, f, g);
       }
     }
+    return vertexSubsetData<data>(n);
+  }
+}
+
+template <class data, class vertex, class VS, class F>
+vertexSubsetData<data> edgeMapDenseForward(graph<vertex> GA, VS& vertexSubset, F &f, const flags fl, const int maxThreads) {
+  using D = tuple<bool, data>;
+  long n = GA.n;
+  vertex *G = GA.V;
+  if (should_output(fl)) {
+    D* next = newA(D, n);
+    auto g = get_emdense_forward_gen<data>(next);
+
+#pragma omp parallel for num_threads(maxThreads)
+    for (long i=0; i < n; i++) {
+      std::get<0>(next[i]) = 0;
+    }
+
+#pragma omp parallel for num_threads(maxThreads)
+    for (long i=0; i<n; i++) {
+      if (vertexSubset.isIn(i)) {
+        G[i].decodeOutNgh(i, f, g);
+      }
+    }
+
+    return vertexSubsetData<data>(n, next);
+  } else {
+    auto g = get_emdense_forward_nooutput_gen<data>();
+
+#pragma omp parallel for num_threads(maxThreads)
+    for (long i=0; i<n; i++) {
+      if (vertexSubset.isIn(i)) {
+        G[i].decodeOutNgh(i, f, g);
+      }
+    }
+
     return vertexSubsetData<data>(n);
   }
 }
@@ -276,11 +314,63 @@ vertexSubsetData<data> edgeMapData(graph<vertex>& GA, VS &vs, F f,
   }
 }
 
+// Decides on sparse or dense base on number of nonzeros in the active vertices.
+template <class data, class vertex, class VS, class F>
+vertexSubsetData<data> edgeMapData(graph<vertex>& GA, VS &vs, F f,
+    intT threshold = -1, const flags& fl=0, const int maxThreads) {
+  long numVertices = GA.n, numEdges = GA.m, m = vs.numNonzeros();
+  if(threshold == -1) threshold = numEdges/20; //default threshold
+  vertex *G = GA.V;
+  if (numVertices != vs.numRows()) {
+    cout << "edgeMap: Sizes Don't match" << endl;
+    abort();
+  }
+  if (m == 0) return vertexSubsetData<data>(numVertices);
+  uintT* degrees = NULL;
+  vertex* frontierVertices = NULL;
+  uintT outDegrees = 0;
+  if((fl & no_dense) || threshold > 0) { //compute sum of out-degrees if threshold > 0
+    vs.toSparse();
+    degrees = newA(uintT, m);
+    frontierVertices = newA(vertex,m);
+    {parallel_for (size_t i=0; i < m; i++) {
+      uintE v_id = vs.vtx(i);
+      vertex v = G[v_id];
+      degrees[i] = v.getOutDegree();
+      frontierVertices[i] = v;
+    }}
+    outDegrees = sequence::plusReduce(degrees, m);
+    if (outDegrees == 0) return vertexSubsetData<data>(numVertices);
+  }
+  if (!(fl & no_dense) && m + outDegrees > threshold) {
+    if(degrees) free(degrees);
+    if(frontierVertices) free(frontierVertices);
+    vs.toDense();
+    return edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl, maxThreads);
+    /*return (fl & dense_forward) ?
+      edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl) :
+      edgeMapDense<data, vertex, VS, F>(GA, vs, f, fl);*/
+  } else {
+    auto vs_out =
+      (should_output(fl) && fl & sparse_no_filter) ? // only call snof when we output
+      edgeMapSparse_no_filter<data, vertex, VS, F>(GA, frontierVertices, vs, degrees, vs.numNonzeros(), f, fl) :
+      edgeMapSparse<data, vertex, VS, F>(GA, frontierVertices, vs, degrees, vs.numNonzeros(), f, fl);
+    free(degrees); free(frontierVertices);
+    return vs_out;
+  }
+}
+
 // Regular edgeMap, where no extra data is stored per vertex.
 template <class vertex, class VS, class F>
 vertexSubset edgeMap(graph<vertex>& GA, VS& vs, F f,
     intT threshold = -1, const flags& fl=0) {
   return edgeMapData<pbbs::empty>(GA, vs, f, threshold, fl);
+}
+
+template <class vertex, class VS, class F>
+vertexSubset edgeMap(graph<vertex>& GA, VS& vs, F f, const int maxThreads,
+    intT threshold = -1, const flags& fl=0) {
+  return edgeMapData<pbbs::empty>(GA, vs, f, threshold, fl, maxThreads);
 }
 
 // Packs out the adjacency lists of all vertex in vs. A neighbor, ngh, is kept
