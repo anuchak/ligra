@@ -22,8 +22,8 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <chrono>
-#include "../ligra/ligra.h"
-#include "omp.h"
+#include <omp.h>
+#include "ligra.h"
 #include <algorithm>
 
 struct BFS_F {
