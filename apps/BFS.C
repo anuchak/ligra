@@ -23,7 +23,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <chrono>
 #include <omp.h>
-#include "ligra.h"
+#include "../ligra/ligra.h"
 #include <algorithm>
 
 struct BFS_F {
