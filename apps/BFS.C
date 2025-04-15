@@ -54,28 +54,29 @@ void Compute(graph<vertex> &GA, commandLine P) {
     auto totalThreads = omp_get_max_threads();
     // hardcoding 'k' value, launch 2 sources
     auto k = 2;
-    int threadsPerSource = std::ceil(totalThreads / k);
-    printf("max threads available: %d | threads to launch per source: %d\n", totalThreads, threadsPerSource);
-
     // enable nested parallelism
     omp_set_nested(1);
-
     for (auto round = 0u; round < 2u; round++) {
         auto duration = std::chrono::system_clock::now().time_since_epoch();
         auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
         // re-using the rounds parameter for total sources to perform BFS for
-        unsigned start = P.getOptionLongValue("-r", 0);
-        for (auto source = 0u; source < start; source += k) {
+        unsigned sourceStart = P.getOptionLongValue("-sourceStart", 0);
+        unsigned sourceEnd = P.getOptionLongValue("-sourceEnd", 0);
+        for (auto source = sourceStart; source < sourceEnd; source += k) {
             // printf("source: %lu \n", source);
             // auto duration2 = std::chrono::system_clock::now().time_since_epoch();
             // auto millis2 = std::chrono::duration_cast<std::chrono::milliseconds>(duration2).count();
 
-            auto batchEnd = std::min(source + k, start);
+            auto batchEnd = std::min(source + k, sourceEnd);
             auto totalThreadsToLaunch = batchEnd - source;
+            int threadsPerSource = std::ceil(totalThreads / totalThreadsToLaunch);
+            printf("max threads available: %d | threads to launch per source: %d\n", totalThreads, threadsPerSource);
 
             #pragma omp parallel for num_threads(totalThreadsToLaunch)
             for (auto batchStart = source; batchStart < batchEnd; batchStart++) {
                 // add BFS Logic
+                int tid = omp_get_thread_num();
+                printf("Thread: %d | Source: %u\n", tid, batchStart);
                 long n = GA.n;
                 //creates Parents array, initialized to all -1, except for start
                 uintE *Parents = newA(uintE, n);
@@ -91,7 +92,7 @@ void Compute(graph<vertex> &GA, commandLine P) {
                     // if some source is not connected at all (no work), then increment total sources given
                     // ensure fairness of work, exactly 1 / 8 / 64 sources with work are used for BFS
                     if (level == 1 && Frontier.size() == 0) {
-                        start++;
+                        sourceEnd++;
                     }
                 }
                 Frontier.del();
