@@ -25,7 +25,7 @@
 #define LIGRA_H
 #include <iostream>
 #include <fstream>
-#include <stdlib.h>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <algorithm>
@@ -42,6 +42,7 @@
 #include "parseCommandLine.h"
 #include "index_map.h"
 #include "edgeMap_utils.h"
+#include <chrono>
 using namespace std;
 
 /*****START FRAMEWORK*****/
