@@ -118,13 +118,11 @@ vertexSubsetData<data> edgeMapDenseForward(graph<vertex> GA, VS& vertexSubset, F
     D* next = newA(D, n);
     auto g = get_emdense_forward_gen<data>(next);
 
-#pragma omp parallel for num_threads(maxThreads)
-    for (long i=0; i < n; i++) {
+parallel_for (long i=0; i < n; i++) {
       std::get<0>(next[i]) = 0;
     }
 
-#pragma omp parallel for num_threads(maxThreads)
-    for (long i=0; i<n; i++) {
+parallel_for (long i=0; i<n; i++) {
       if (vertexSubset.isIn(i)) {
         G[i].decodeOutNgh(i, f, g);
       }
@@ -134,8 +132,7 @@ vertexSubsetData<data> edgeMapDenseForward(graph<vertex> GA, VS& vertexSubset, F
   } else {
     auto g = get_emdense_forward_nooutput_gen<data>();
 
-#pragma omp parallel for num_threads(maxThreads)
-    for (long i=0; i<n; i++) {
+parallel_for (long i=0; i<n; i++) {
       if (vertexSubset.isIn(i)) {
         G[i].decodeOutNgh(i, f, g);
       }
@@ -147,7 +144,7 @@ vertexSubsetData<data> edgeMapDenseForward(graph<vertex> GA, VS& vertexSubset, F
 
 template <class data, class vertex, class VS, class F>
 vertexSubsetData<data> edgeMapSparse(graph<vertex>& GA, vertex* frontierVertices, VS& indices,
-        uintT* degrees, uintT m, F &f, const flags fl) {
+        uintT* degrees, uintT m, F &f, const flags fl, int maxThreads = 32) {
   using S = tuple<uintE, data>;
   long n = indices.n;
   S* outEdges;
@@ -194,7 +191,7 @@ vertexSubsetData<data> edgeMapSparse(graph<vertex>& GA, vertex* frontierVertices
 template <class data, class vertex, class VS, class F>
 vertexSubsetData<data> edgeMapSparse_no_filter(graph<vertex>& GA,
     vertex* frontierVertices, VS& indices, uintT* offsets, uintT m, F& f,
-    const flags fl) {
+    const flags fl, int maxThreads = 32) {
   using S = tuple<uintE, data>;
   long n = indices.n;
   long outEdgeCount = sequence::plusScan(offsets, offsets, m);
@@ -333,12 +330,14 @@ vertexSubsetData<data> edgeMapDataLimitedThreads(graph<vertex>& GA, VS &vs, F f,
     vs.toSparse();
     degrees = newA(uintT, m);
     frontierVertices = newA(vertex,m);
-    {parallel_for (size_t i=0; i < m; i++) {
-      uintE v_id = vs.vtx(i);
-      vertex v = G[v_id];
-      degrees[i] = v.getOutDegree();
-      frontierVertices[i] = v;
-    }}
+    {
+      parallel_for (size_t i=0; i < m; i++) {
+        uintE v_id = vs.vtx(i);
+        vertex v = G[v_id];
+        degrees[i] = v.getOutDegree();
+        frontierVertices[i] = v;
+      }
+    }
     outDegrees = sequence::plusReduce(degrees, m);
     if (outDegrees == 0) return vertexSubsetData<data>(numVertices);
   }
@@ -346,15 +345,28 @@ vertexSubsetData<data> edgeMapDataLimitedThreads(graph<vertex>& GA, VS &vs, F f,
     if(degrees) free(degrees);
     if(frontierVertices) free(frontierVertices);
     vs.toDense();
-    return edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl, maxThreads);
+    auto duration = std::chrono::system_clock::now().time_since_epoch();
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    auto vs_out = edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl, maxThreads);
+    auto duration1 = std::chrono::system_clock::now().time_since_epoch();
+    auto millis1 = std::chrono::duration_cast<std::chrono::milliseconds>(duration1).count();
+    printf("total time for dense frontier: %lu\n", millis1 - millis);
+    return vs_out;
     /*return (fl & dense_forward) ?
       edgeMapDenseForward<data, vertex, VS, F>(GA, vs, f, fl) :
       edgeMapDense<data, vertex, VS, F>(GA, vs, f, fl);*/
   } else {
+    auto duration = std::chrono::system_clock::now().time_since_epoch();
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
     auto vs_out =
       (should_output(fl) && fl & sparse_no_filter) ? // only call snof when we output
-      edgeMapSparse_no_filter<data, vertex, VS, F>(GA, frontierVertices, vs, degrees, vs.numNonzeros(), f, fl) :
-      edgeMapSparse<data, vertex, VS, F>(GA, frontierVertices, vs, degrees, vs.numNonzeros(), f, fl);
+      edgeMapSparse_no_filter<data, vertex, VS, F>(GA, frontierVertices, vs, degrees, vs.numNonzeros(), f,
+        fl, maxThreads) :
+      edgeMapSparse<data, vertex, VS, F>(GA, frontierVertices, vs, degrees, vs.numNonzeros(), f, fl,
+        maxThreads);
+    auto duration1 = std::chrono::system_clock::now().time_since_epoch();
+    auto millis1 = std::chrono::duration_cast<std::chrono::milliseconds>(duration1).count();
+    printf("total time for sparse frontier: %lu\n", millis1 - millis);
     free(degrees); free(frontierVertices);
     return vs_out;
   }

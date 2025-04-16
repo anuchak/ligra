@@ -70,9 +70,10 @@ void Compute(graph<vertex> &GA, commandLine P) {
             auto batchEnd = std::min(source + k, sourceEnd);
             auto totalThreadsToLaunch = batchEnd - source;
             int threadsPerSource = std::ceil(totalThreads / totalThreadsToLaunch);
-            printf("max threads available: %d | threads to launch per source: %d\n", totalThreads, threadsPerSource);
+            printf("max threads available: %d | threads to launch per source: %d | total sources launched: %d\n",
+                totalThreads, threadsPerSource, totalThreadsToLaunch);
 
-            #pragma omp parallel for num_threads(totalThreadsToLaunch)
+            #pragma omp parallel for num_threads(totalThreadsToLaunch) schedule(static)
             for (auto batchStart = source; batchStart < batchEnd; batchStart++) {
                 // add BFS Logic
                 int tid = omp_get_thread_num();
@@ -89,6 +90,7 @@ void Compute(graph<vertex> &GA, commandLine P) {
                     Frontier.del();
                     Frontier = output; //set new frontier
                     level++;
+                    printf("level: %d | %lu\n", level, Frontier.size());
                     // if some source is not connected at all (no work), then increment total sources given
                     // ensure fairness of work, exactly 1 / 8 / 64 sources with work are used for BFS
                     if (level == 1 && Frontier.size() == 0) {
