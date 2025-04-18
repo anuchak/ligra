@@ -22,7 +22,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <chrono>
-#include "ligra.h"
+#include "../ligra/ligra.h"
 
 struct BFS_F {
   uintE* Parents;
@@ -44,8 +44,9 @@ void Compute(graph<vertex>& GA, commandLine P) {
   auto duration = std::chrono::system_clock::now().time_since_epoch();
   auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
   // re-using the rounds parameter for total sources to perform BFS for
-  long start = P.getOptionLongValue("-r",0);
-  for (auto source = 0u; source < start; source++) {
+  long sourceStart = P.getOptionLongValue("-sourceStart",0);
+  long sourceEnd = P.getOptionLongValue("-sourceEnd",0);
+  for (auto source = sourceStart; source < sourceEnd; source++) {
    // printf("source: %lu \n", source);
    // auto duration2 = std::chrono::system_clock::now().time_since_epoch();
    // auto millis2 = std::chrono::duration_cast<std::chrono::milliseconds>(duration2).count();
@@ -59,7 +60,7 @@ void Compute(graph<vertex>& GA, commandLine P) {
   while(!Frontier.isEmpty()) { //loop until frontier is empty
     //auto duration3 = std::chrono::system_clock::now().time_since_epoch();
     //auto millis3 = std::chrono::duration_cast<std::chrono::milliseconds>(duration3).count();
-    //printf("size of frontier %lu \n", Frontier.size());
+    printf("size of frontier %lu \n", Frontier.size());
     vertexSubset output = edgeMap(GA, Frontier, BFS_F(Parents));
     Frontier.del();
     Frontier = output; //set new frontier
@@ -70,7 +71,7 @@ void Compute(graph<vertex>& GA, commandLine P) {
     // if some source is not connected at all (no work), then increment total sources given
     // ensure fairness of work, exactly 1 / 8 / 64 sources with work are used for BFS
     if (level == 1 && Frontier.size() == 0) {
-      start++;
+      sourceEnd++;
     }
   }
   Frontier.del();
