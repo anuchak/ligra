@@ -38,6 +38,7 @@ struct TaskInfo {
     alignas(64) atomic<bool> finalExit{false};
     alignas(64) atomic<long> sourceStart{0llu};
     alignas(64) atomic<long> sourceEnd{0llu};
+    alignas(64) atomic<long> numThreadsCompleted{0llu};
     graph<vertex> &GA;
 
     explicit TaskInfo(graph<vertex> &GA) : GA(GA) {}
@@ -106,6 +107,7 @@ void workerThreadFunc(TaskInfo<vertex> &info) {
             Frontier.del();
             free(Parents);
         }
+        info.numThreadsCompleted.fetch_add(1u);
         cv.notify_all();
     }
 }
@@ -133,11 +135,12 @@ void Compute(graph<vertex> &GA, commandLine P) {
             taskInfo.lock.lock();
             taskInfo.sourceStart.store(source, memory_order_release);
             taskInfo.sourceEnd.store(end, memory_order_release);
+            taskInfo.numThreadsCompleted.store(0u, memory_order_release);
             taskInfo.lock.unlock();
             taskInfo.cond.notify_all();
             lck.lock();
             taskInfo.cond.wait(lck, [&] {
-               return taskInfo.sourceStart.load(std::memory_order_acquire) >= end;
+               return taskInfo.numThreadsCompleted.load(std::memory_order_acquire) == k;
             });
             lck.unlock();
             if (end == sourceEnd) {
