@@ -640,11 +640,7 @@ int parallel_main(int argc, char* argv[]) {
       hypergraph<asymmetricVertex> G =
         readHypergraph<asymmetricVertex>(iFile,compressed,symmetric,binary,mmap); //asymmetric graph
 #endif
-      for (auto i = 32; i > 0; i/=2) {
-         omp_set_num_threads(i);
-         printf("Setting total threads to: %u\n", i);
-      	 Compute(G,P);
-      }
+      Compute(G,P);
       /*if(G.transposed) G.transpose();
       for(int r=0;r<1;r++) {
         startTime();

@@ -95,10 +95,12 @@ void workerThreadFunc(TaskInfo<vertex> &info) {
         auto currSource = 0u;
         omp_set_num_threads(info.threads);
         while ((currSource = info.sourceStart.fetch_add(1u)) < info.sourceEnd.load(memory_order_acquire)) {
-            std::stringstream ss;
+            /*std::stringstream ss;
             ss << std::this_thread::get_id();
             uint64_t id = std::stoull(ss.str());
-            printf("thread: %lu | source: %u\n", id, currSource);
+             printf("thread: %lu | source: %u\n", id, currSource);*/
+            auto duration = std::chrono::system_clock::now().time_since_epoch();
+            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
             long n = info.GA.n;
             //creates Parents array, initialized to all -1, except for start
             uintE *Parents = newA(uintE, n);
@@ -111,10 +113,13 @@ void workerThreadFunc(TaskInfo<vertex> &info) {
                 Frontier.del();
                 Frontier = output; //set new frontier
                 level++;
-                printf("source: %u | level: %d | size: %lu\n", currSource, level, Frontier.size());
+                // printf("source: %u | level: %d | size: %lu\n", currSource, level, Frontier.size());
             }
             Frontier.del();
             free(Parents);
+            auto duration1 = std::chrono::system_clock::now().time_since_epoch();
+            auto millis1 = std::chrono::duration_cast<std::chrono::milliseconds>(duration1).count();
+            printf("source %u, time taken: %ld\n", currSource, millis1 - millis);
         }
         lck.lock();
         ++info.numThreadsCompleted;
@@ -136,6 +141,7 @@ void Compute(graph<vertex> &GA, commandLine P) {
     }
     std::unique_lock<std::mutex> lck(taskInfo.lock, std::defer_lock);
     for (auto threads = 32; threads > 0; threads /= 2) {
+        printf("setting openmp threads to %d\n", threads);
         taskInfo.threads = threads;
         for (auto round = 0u; round < 2u; round++) {
             auto duration = std::chrono::system_clock::now().time_since_epoch();
