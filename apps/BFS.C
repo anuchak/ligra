@@ -38,7 +38,8 @@ struct TaskInfo {
     alignas(64) atomic<bool> finalExit{false};
     alignas(64) atomic<long> sourceStart{0llu};
     alignas(64) atomic<long> sourceEnd{0llu};
-    alignas(64) atomic<long> numThreadsCompleted{0llu};
+    alignas(64) long numThreadsRegistered{0llu};
+    alignas(64) long numThreadsCompleted{0llu};
     graph<vertex> &GA;
 
     explicit TaskInfo(graph<vertex> &GA) : GA(GA) {}
@@ -79,17 +80,23 @@ void workerThreadFunc(TaskInfo<vertex> &info) {
                 return true;
             }
             if (info.sourceStart.load(std::memory_order_acquire)
-                != info.sourceEnd.load(std::memory_order_acquire)) {
+                < info.sourceEnd.load(std::memory_order_acquire)) {
                 return true;
             }
             return false;
         });
-        lck.unlock();
         if (info.finalExit.load(std::memory_order_acquire)) {
+            lck.unlock();
             return;
         }
+        ++info.numThreadsRegistered;
+        lck.unlock();
         auto currSource = 0u;
         while ((currSource = info.sourceStart.fetch_add(1u)) < info.sourceEnd.load(memory_order_acquire)) {
+            std::stringstream ss;
+            ss << std::this_thread::get_id();
+            uint64_t id = std::stoull(ss.str());
+            printf("thread: %lu | source: %u\n", id, currSource);
             long n = info.GA.n;
             //creates Parents array, initialized to all -1, except for start
             uintE *Parents = newA(uintE, n);
@@ -107,15 +114,17 @@ void workerThreadFunc(TaskInfo<vertex> &info) {
             Frontier.del();
             free(Parents);
         }
-        info.numThreadsCompleted.fetch_add(1u);
+        lck.lock();
+        ++info.numThreadsCompleted;
+        lck.unlock();
         cv.notify_all();
     }
 }
 
 template<class vertex>
 void Compute(graph<vertex> &GA, commandLine P) {
-    // hardcoding 'k' value, base case is 1 source
-    auto k = 1;
+    // 'k': no. of concurrent sources / master threads to launch
+    int k = P.getOptionLongValue("-k", 1);
     auto workerThreads = std::vector<std::thread>();
     TaskInfo<vertex> taskInfo {GA};
     for (auto i = 0u; i < k; i++) {
@@ -135,12 +144,14 @@ void Compute(graph<vertex> &GA, commandLine P) {
             taskInfo.lock.lock();
             taskInfo.sourceStart.store(source, memory_order_release);
             taskInfo.sourceEnd.store(end, memory_order_release);
-            taskInfo.numThreadsCompleted.store(0u, memory_order_release);
+            taskInfo.numThreadsRegistered = 0, taskInfo.numThreadsCompleted = 0;
             taskInfo.lock.unlock();
             taskInfo.cond.notify_all();
             lck.lock();
             taskInfo.cond.wait(lck, [&] {
-               return taskInfo.numThreadsCompleted.load(std::memory_order_acquire) == k;
+               return taskInfo.numThreadsRegistered > 0 &&
+                   taskInfo.numThreadsRegistered == taskInfo.numThreadsCompleted;
+
             });
             lck.unlock();
             if (end == sourceEnd) {
