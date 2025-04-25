@@ -41,6 +41,7 @@ struct TaskInfo {
     alignas(64) long numThreadsRegistered{0llu};
     alignas(64) long numThreadsCompleted{0llu};
     graph<vertex> &GA;
+    int threads{32u};
 
     explicit TaskInfo(graph<vertex> &GA) : GA(GA) {}
 };
@@ -92,6 +93,7 @@ void workerThreadFunc(TaskInfo<vertex> &info) {
         ++info.numThreadsRegistered;
         lck.unlock();
         auto currSource = 0u;
+        omp_set_num_threads(info.threads);
         while ((currSource = info.sourceStart.fetch_add(1u)) < info.sourceEnd.load(memory_order_acquire)) {
             std::stringstream ss;
             ss << std::this_thread::get_id();
@@ -133,35 +135,38 @@ void Compute(graph<vertex> &GA, commandLine P) {
         });
     }
     std::unique_lock<std::mutex> lck(taskInfo.lock, std::defer_lock);
-    for (auto round = 0u; round < 2u; round++) {
-        auto duration = std::chrono::system_clock::now().time_since_epoch();
-        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-        unsigned sourceStart = P.getOptionLongValue("-sourceStart", 0);
-        unsigned sourceEnd = P.getOptionLongValue("-sourceEnd", 0);
-        auto source = sourceStart;
-        while (true) {
-            auto end = std::min(source + k, sourceEnd);
-            taskInfo.lock.lock();
-            taskInfo.sourceStart.store(source, memory_order_release);
-            taskInfo.sourceEnd.store(end, memory_order_release);
-            taskInfo.numThreadsRegistered = 0, taskInfo.numThreadsCompleted = 0;
-            taskInfo.lock.unlock();
-            taskInfo.cond.notify_all();
-            lck.lock();
-            taskInfo.cond.wait(lck, [&] {
-               return taskInfo.numThreadsRegistered > 0 &&
-                   taskInfo.numThreadsRegistered == taskInfo.numThreadsCompleted;
+    for (auto threads = 32; threads > 0; threads /= 2) {
+        taskInfo.threads = threads;
+        for (auto round = 0u; round < 2u; round++) {
+            auto duration = std::chrono::system_clock::now().time_since_epoch();
+            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            unsigned sourceStart = P.getOptionLongValue("-sourceStart", 0);
+            unsigned sourceEnd = P.getOptionLongValue("-sourceEnd", 0);
+            auto source = sourceStart;
+            while (true) {
+                auto end = std::min(source + k, sourceEnd);
+                taskInfo.lock.lock();
+                taskInfo.sourceStart.store(source, memory_order_release);
+                taskInfo.sourceEnd.store(end, memory_order_release);
+                taskInfo.numThreadsRegistered = 0, taskInfo.numThreadsCompleted = 0;
+                taskInfo.lock.unlock();
+                taskInfo.cond.notify_all();
+                lck.lock();
+                taskInfo.cond.wait(lck, [&] {
+                   return taskInfo.numThreadsRegistered > 0 &&
+                       taskInfo.numThreadsRegistered == taskInfo.numThreadsCompleted;
 
-            });
-            lck.unlock();
-            if (end == sourceEnd) {
-                break;
+                });
+                lck.unlock();
+                if (end == sourceEnd) {
+                    break;
+                }
+                source = end;
             }
-            source = end;
+            auto duration1 = std::chrono::system_clock::now().time_since_epoch();
+            auto millis1 = std::chrono::duration_cast<std::chrono::milliseconds>(duration1).count();
+            printf("total time: %lu\n", millis1 - millis);
         }
-        auto duration1 = std::chrono::system_clock::now().time_since_epoch();
-        auto millis1 = std::chrono::duration_cast<std::chrono::milliseconds>(duration1).count();
-        printf("total time: %lu\n", millis1 - millis);
     }
     taskInfo.lock.lock();
     taskInfo.finalExit.store(true, memory_order_release);
