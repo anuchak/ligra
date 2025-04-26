@@ -141,8 +141,6 @@ void Compute(graph<vertex> &GA, commandLine P) {
     }
     std::unique_lock<std::mutex> lck(taskInfo.lock, std::defer_lock);
     for (auto threads = 32; threads > 0; threads /= 2) {
-        printf("setting openmp threads to %d\n", threads);
-        taskInfo.threads = threads;
         for (auto round = 0u; round < 2u; round++) {
             auto duration = std::chrono::system_clock::now().time_since_epoch();
             auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
@@ -155,13 +153,16 @@ void Compute(graph<vertex> &GA, commandLine P) {
                 taskInfo.sourceStart.store(source, memory_order_release);
                 taskInfo.sourceEnd.store(end, memory_order_release);
                 taskInfo.numThreadsRegistered = 0, taskInfo.numThreadsCompleted = 0;
+                uint64_t threadsPerSource = std::ceil( static_cast<double>(threads) /
+                    static_cast<double>(end - source));
+                printf("setting openmp threads to %lu per source\n", threadsPerSource);
+                taskInfo.threads = threadsPerSource;
                 taskInfo.lock.unlock();
                 taskInfo.cond.notify_all();
                 lck.lock();
                 taskInfo.cond.wait(lck, [&] {
                    return taskInfo.numThreadsRegistered > 0 &&
                        taskInfo.numThreadsRegistered == taskInfo.numThreadsCompleted;
-
                 });
                 lck.unlock();
                 if (end == sourceEnd) {
